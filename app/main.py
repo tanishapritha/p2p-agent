@@ -10,7 +10,7 @@ from app.models import Invoice, ExceptionCase
 from app.matching import MatchInput, run_three_way_match
 from app.ingestion import extract_pdf_text, PDFIngestionError
 from app.llm import extract_invoice_with_llm, LLMNotConfigured
-from app.schemas import ExtractedInvoice\nfrom app.models import AgentRun, AgentEvent, Vendor, Invoice, InvoiceLine, PurchaseOrder, POLine, GoodsReceipt, GRNLine\nfrom app.agent import run_invoice_agent\nfrom datetime import datetime, timezone
+from app.schemas import ExtractedInvoice\nfrom app.models import AgentRun, AgentEvent, Vendor, Invoice, InvoiceLine, PurchaseOrder, POLine, GoodsReceipt, GRNLine\nfrom app.agent import run_invoice_agent\nfrom datetime import datetime, timezone\nfrom decimal import Decimal
 
 app = FastAPI(title="P2P Invoice Exception Agent", version="0.1.0")
 
