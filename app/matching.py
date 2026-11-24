@@ -4,17 +4,17 @@ from pydantic import BaseModel, Field
 
 class MatchLine(BaseModel):
     description: str
-    quantity: Decimal
-    unit_price: Decimal
+    quantity: Decimal = Field(gt=0)
+    unit_price: Decimal = Field(ge=0)
 
 class MatchInput(BaseModel):
     invoice_number: str
     vendor_match: bool
     currency: str = "INR"
-    invoice_subtotal: Decimal
-    invoice_tax: Decimal = Decimal("0")
-    invoice_total: Decimal
-    invoice_lines: list[MatchLine]
+    invoice_subtotal: Decimal = Field(ge=0)
+    invoice_tax: Decimal = Field(ge=0)
+    invoice_total: Decimal = Field(ge=0)
+    invoice_lines: list[MatchLine] = Field(min_length=1)
     po_found: bool
     po_currency: str | None = None
     po_lines: list[MatchLine] = Field(default_factory=list)
@@ -28,7 +28,7 @@ def _money(value: Decimal) -> Decimal:
     return value.quantize(Decimal("0.01"))
 
 def run_three_way_match(data: MatchInput) -> dict[str, Any]:
-    """Deterministic match. Ambiguous/missing records never become approvals."""
+    """Deterministic match. Missing/ambiguous source data always holds."""
     exceptions: list[dict[str, Any]] = []
     if data.duplicate:
         exceptions.append({"type": "DUPLICATE_INVOICE"})
@@ -36,15 +36,20 @@ def run_three_way_match(data: MatchInput) -> dict[str, Any]:
         exceptions.append({"type": "VENDOR_MISMATCH"})
     if not data.po_found:
         exceptions.append({"type": "MISSING_PO"})
+    elif not data.po_lines:
+        exceptions.append({"type": "MISSING_PO_LINES"})
     if not data.grn_found:
         exceptions.append({"type": "MISSING_GRN"})
-    if data.po_found and data.po_currency and data.currency != data.po_currency:
+    elif not data.grn_lines:
+        exceptions.append({"type": "MISSING_GRN_LINES"})
+    if data.po_found and data.po_currency and data.currency.upper() != data.po_currency.upper():
         exceptions.append({"type": "CURRENCY_MISMATCH"})
     quantity_status = "NOT_CHECKED"
     price_status = "NOT_CHECKED"
     if data.po_found and data.po_lines:
         if len(data.invoice_lines) != len(data.po_lines):
             exceptions.append({"type": "LINE_COUNT_MISMATCH"})
+            quantity_status = price_status = "MISMATCH"
         else:
             qty_ok, price_ok = True, True
             for inv, po in zip(data.invoice_lines, data.po_lines):
@@ -72,7 +77,7 @@ def run_three_way_match(data: MatchInput) -> dict[str, Any]:
             if received < inv.quantity - data.quantity_tolerance:
                 exceptions.append({"type": "QUANTITY_NOT_RECEIVED", "description": inv.description,
                                    "invoice_quantity": str(inv.quantity), "received_quantity": str(received)})
-    computed_subtotal = _money(sum((l.quantity * l.unit_price for l in data.invoice_lines), Decimal("0")))
+    computed_subtotal = _money(sum((line.quantity * line.unit_price for line in data.invoice_lines), Decimal("0")))
     if computed_subtotal != _money(data.invoice_subtotal):
         exceptions.append({"type": "SUBTOTAL_MISMATCH", "computed": str(computed_subtotal),
                            "invoice": str(_money(data.invoice_subtotal))})
