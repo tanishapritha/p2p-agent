@@ -10,7 +10,7 @@ from app.models import Invoice, ExceptionCase
 from app.matching import MatchInput, run_three_way_match
 from app.ingestion import extract_pdf_text, PDFIngestionError
 from app.llm import extract_invoice_with_llm, LLMNotConfigured
-from app.schemas import ExtractedInvoice\nfrom app.models import AgentRun, AgentEvent\nfrom app.agent import run_invoice_agent\nfrom datetime import datetime, timezone
+from app.schemas import ExtractedInvoice\nfrom app.models import AgentRun, AgentEvent, Vendor, Invoice, InvoiceLine\nfrom app.agent import run_invoice_agent\nfrom datetime import datetime, timezone
 
 app = FastAPI(title="P2P Invoice Exception Agent", version="0.1.0")
 
@@ -51,6 +51,38 @@ async def upload_invoice(file: UploadFile = File(...)):
     return {"status":"EXTRACTED_NOT_PERSISTED", "source":method, "model":model,
             "usage":usage, "fields":validated.model_dump(mode="json"),
             "note":"Extraction is untrusted until reviewed and linked to verified business records."}
+
+
+class ConfirmInvoiceRequest(ExtractedInvoice):
+    vendor_id: int = Field(gt=0)
+    confirmed_by: str = Field(min_length=2, max_length=255)
+
+@app.post("/invoices/confirm")
+def confirm_extracted_invoice(payload: ConfirmInvoiceRequest, db: Session = Depends(get_db)):
+    """Persist extracted invoice facts only after a named human confirms and selects a vendor."""
+    vendor=db.get(Vendor,payload.vendor_id)
+    if not vendor:
+        raise HTTPException(404,"Vendor ID does not exist")
+    duplicate=db.scalar(select(Invoice.id).where(Invoice.vendor_id==vendor.id,
+        Invoice.invoice_number==payload.invoice_number))
+    if duplicate:
+        raise HTTPException(409,"Invoice already exists for this vendor and number")
+    invoice=Invoice(invoice_number=payload.invoice_number,vendor_id=vendor.id,
+        po_number=payload.po_number,grn_number=payload.grn_number,currency=payload.currency.upper(),
+        subtotal=payload.subtotal,tax=payload.tax,total=payload.total,
+        extraction=payload.model_dump(mode="json"))
+    invoice.lines=[InvoiceLine(description=line.description,quantity=line.quantity,unit_price=line.unit_price)
+        for line in payload.line_items]
+    db.add(invoice)
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(409,"Invoice persistence conflict; check duplicate or database constraints") from exc
+    db.refresh(invoice)
+    return {"status":"PERSISTED_PENDING_MATCH","invoice_id":invoice.id,"invoice_number":invoice.invoice_number,
+        "vendor_id":vendor.id,"confirmed_by":payload.confirmed_by,
+        "message":"Invoice stored. Run the exception agent to resolve linked PO and GRN. Human identity is not authenticated by this endpoint."}
 
 @app.post("/matching/evaluate")
 def evaluate_match(payload: MatchInput):
