@@ -3,14 +3,14 @@ from uuid import uuid4
 from fastapi import FastAPI, Depends, UploadFile, File, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import select
-from pydantic import ValidationError
+from pydantic import ValidationError, BaseModel, Field
 from app.config import settings
 from app.db import get_db
 from app.models import Invoice, ExceptionCase
 from app.matching import MatchInput, run_three_way_match
 from app.ingestion import extract_pdf_text, PDFIngestionError
 from app.llm import extract_invoice_with_llm, LLMNotConfigured
-from app.schemas import ExtractedInvoice
+from app.schemas import ExtractedInvoice\nfrom app.models import AgentRun, AgentEvent\nfrom app.agent import run_invoice_agent\nfrom datetime import datetime, timezone
 
 app = FastAPI(title="P2P Invoice Exception Agent", version="0.1.0")
 
@@ -73,3 +73,47 @@ def readiness(db: Session = Depends(get_db)):
         return {"status":"ready","database":"connected","llm_configured":bool(settings.llm_api_key)}
     except Exception as exc:
         raise HTTPException(503, "Database unavailable") from exc
+
+class ReviewRequest(BaseModel):
+    reviewer: str = Field(min_length=2, max_length=255)
+    decision: str = Field(pattern="^(ACKNOWLEDGE|DISPUTE)$")
+    note: str = Field(default="", max_length=2000)
+
+@app.post("/agent/invoices/{invoice_id}/run")
+def start_agent(invoice_id: int, idempotency_key: str | None = None):
+    try:
+        return run_invoice_agent(invoice_id, idempotency_key)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+@app.get("/agent/runs/{run_id}")
+def get_agent_run(run_id: int, db: Session = Depends(get_db)):
+    run = db.get(AgentRun, run_id)
+    if not run:
+        raise HTTPException(404, "Agent run not found")
+    events = db.scalars(select(AgentEvent).where(AgentEvent.run_id == run_id).order_by(AgentEvent.id)).all()
+    return {"run_id":run.id,"invoice_id":run.invoice_id,"status":run.status,"state":run.state_json,
+            "result":run.result_json,"reviewer":run.reviewer,"review_note":run.review_note,
+            "events":[{"id":e.id,"type":e.event_type,"status":e.status,"details":e.metadata_json,
+                      "created_at":e.created_at.isoformat() if e.created_at else None} for e in events]}
+
+@app.post("/agent/runs/{run_id}/review")
+def review_agent_run(run_id: int, payload: ReviewRequest, db: Session = Depends(get_db)):
+    run=db.get(AgentRun,run_id)
+    if not run:
+        raise HTTPException(404,"Agent run not found")
+    if run.status != "AWAITING_HUMAN_REVIEW":
+        raise HTTPException(409,"Run is not waiting for human review")
+    result=run.result_json or {}
+    result["human_review"]={"decision":payload.decision,"reviewer":payload.reviewer,
+                            "note":payload.note,"reviewed_at":datetime.now(timezone.utc).isoformat()}
+    result["payment_execution"]=False
+    run.result_json=result
+    run.status="HUMAN_REVIEWED"
+    run.reviewer=payload.reviewer
+    run.review_note=payload.note
+    db.add(AgentEvent(run_id=run_id,event_type="human_review",status=payload.decision,
+                       metadata_json={"reviewer":payload.reviewer,"note":payload.note}))
+    db.commit()
+    return {"run_id":run_id,"status":run.status,"decision":payload.decision,
+            "payment_execution":False,"message":"Review recorded. This endpoint cannot authorize or execute payment."}
