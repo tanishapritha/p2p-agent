@@ -47,7 +47,7 @@ def resolve_records(state: WorkflowState) -> WorkflowState:
             "policy": {"quantity_tolerance":str(policy.quantity_tolerance),"price_tolerance":str(policy.price_tolerance),"currency":policy.currency} if policy else None,
             "duplicate": db.scalar(select(Invoice.id).where(Invoice.vendor_id == inv.vendor_id,
                 Invoice.invoice_number == inv.invoice_number, Invoice.id != inv.id)) is not None,
-            "relationships_valid": bool(po and grn and po.vendor_id == inv.vendor_id and grn.po_id == po.id,
+            "relationships_valid": bool(po and grn and po.vendor_id == inv.vendor_id and grn.po_id == po.id),
         }
         state["evidence"] = evidence
         state["status"] = "RECORDS_RESOLVED"
@@ -84,7 +84,7 @@ def deterministic_match(state: WorkflowState) -> WorkflowState:
             result["recommendation"]="HOLD_FOR_REVIEW"
         state["match_result"]=result
         state["status"]="MATCHED"
-        _event(SessionLocal(),state["run_id"],"deterministic_match","SUCCEEDED",{"exception_count":len(result["exceptions"])})
+        event_db=SessionLocal()\n        try:\n            _event(event_db,state["run_id"],"deterministic_match","SUCCEEDED",{"exception_count":len(result["exceptions"])})\n        finally:\n            event_db.close()
         return state
     except Exception as exc:
         state["status"]="FAILED";state["error"]=str(exc)
