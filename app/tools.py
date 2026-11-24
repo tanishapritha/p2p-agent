@@ -2,7 +2,7 @@
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session, selectinload
 from app.models import (Invoice, Vendor, PurchaseOrder, GoodsReceipt, FinancialPolicy,
-                        ExceptionCase, AgentRun)
+                        ExceptionCase)
 
 class ToolNotFound(LookupError):
     pass
