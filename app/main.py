@@ -3,22 +3,24 @@ from uuid import uuid4
 from fastapi import FastAPI, Depends, UploadFile, File, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import select
+from pydantic import ValidationError
 from app.config import settings
 from app.db import get_db
-from app.models import Invoice, InvoiceLine, Vendor, PurchaseOrder, GoodsReceipt, ExceptionCase
+from app.models import Invoice, ExceptionCase
 from app.matching import MatchInput, run_three_way_match
 from app.ingestion import extract_pdf_text, PDFIngestionError
 from app.llm import extract_invoice_with_llm, LLMNotConfigured
+from app.schemas import ExtractedInvoice
 
 app = FastAPI(title="P2P Invoice Exception Agent", version="0.1.0")
 
 @app.get("/health")
 def health():
-    return {"status":"ok","database":"configured","llm_configured":bool(settings.llm_api_key)}
+    return {"status":"ok", "llm_configured":bool(settings.llm_api_key)}
 
 @app.post("/invoices/upload")
 async def upload_invoice(file: UploadFile = File(...)):
-    if file.content_type != "application/pdf" or not file.filename.lower().endswith(".pdf"):
+    if file.content_type != "application/pdf" or not (file.filename or "").lower().endswith(".pdf"):
         raise HTTPException(415, "Only PDF invoices are accepted.")
     raw = await file.read(settings.max_upload_mb * 1024 * 1024 + 1)
     if len(raw) > settings.max_upload_mb * 1024 * 1024:
@@ -30,17 +32,25 @@ async def upload_invoice(file: UploadFile = File(...)):
     try:
         text, method = extract_pdf_text(str(target))
         extracted = await extract_invoice_with_llm(text)
+        usage, model = extracted.pop("_usage", {}), extracted.pop("_model", settings.llm_model)
+        validated = ExtractedInvoice.model_validate(extracted)
     except PDFIngestionError as exc:
         target.unlink(missing_ok=True)
         raise HTTPException(422, str(exc)) from exc
     except LLMNotConfigured as exc:
         target.unlink(missing_ok=True)
         raise HTTPException(503, str(exc)) from exc
+    except ValidationError as exc:
+        target.unlink(missing_ok=True)
+        raise HTTPException(502, "LLM returned data that failed invoice schema validation.") from exc
     except Exception as exc:
         target.unlink(missing_ok=True)
-        raise HTTPException(502, f"Extraction provider failed: {type(exc).__name__}") from exc
-    return {"status":"EXTRACTED_NOT_PERSISTED","source":method,"fields":extracted,
-            "note":"Review and persist through an authorized workflow; extraction alone is not a match or approval."}
+        raise HTTPException(502, f"Extraction failed: {type(exc).__name__}") from exc
+    # Extraction is deliberately not persisted as a trusted invoice until vendor resolution/review.
+    target.unlink(missing_ok=True)
+    return {"status":"EXTRACTED_NOT_PERSISTED", "source":method, "model":model,
+            "usage":usage, "fields":validated.model_dump(mode="json"),
+            "note":"Extraction is untrusted until reviewed and linked to verified business records."}
 
 @app.post("/matching/evaluate")
 def evaluate_match(payload: MatchInput):
