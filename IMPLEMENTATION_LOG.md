@@ -17,7 +17,7 @@ Status vocabulary: implemented (code exists), tested (executed with observed res
 | Evaluation | implemented, partial | app/evaluate.py, eval/datasets/matching_v1.jsonl | Offline labeled synthetic dataset and CLI report deterministic matcher accuracy, hold recall, false approvals. Not full agent/LLM evaluation. | NOT RUN. | Run evaluator, expand coverage, full agent/live evaluation and gates. |
 | Streamlit | implemented, partial | console/app.py | Added agent run, run-event retrieval and human review tab. | NOT RUN. | Full dataset/evaluation/experiment/health tools and input validation. |
 | Docker / CI | implemented, unverified | Dockerfile, docker-compose.yml, .github/workflows/ci.yml | Basic API image, PostgreSQL Compose and unit CI workflow. | NOT RUN; CI has not run. | Verify build and workflow; migration startup. |
-| Tests | implemented, unverified | tests/test_matching.py | Four deterministic tests, no mocks. | NOT RUN in this session. | Add PostgreSQL, live provider and E2E suites. |
+| Tests | implemented, unverified | tests/test_matching.py | Four deterministic matcher tests plus one evaluator test, no mocks. | NOT RUN in this session. | Add PostgreSQL, live provider and E2E suites. |
 
 ## Commits
 - Documentation bootstrap: 5a0fe464f65ce74b444ef967f57bb7397164e7f4
