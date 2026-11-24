@@ -10,7 +10,7 @@ from langgraph.graph import StateGraph, END
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from app.db import SessionLocal
-from app.models import AgentRun, AgentEvent, Invoice, PurchaseOrder, GoodsReceipt, FinancialPolicy, ExceptionCase
+from app.models import AgentRun, AgentEvent, Invoice, PurchaseOrder, GoodsReceipt, FinancialPolicy
 from app.matching import MatchInput, MatchLine, run_three_way_match
 
 class WorkflowState(TypedDict, total=False):
