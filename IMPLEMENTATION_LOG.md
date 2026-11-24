@@ -1,24 +1,37 @@
 # Implementation Log
 
-This checklist is the execution record. Status values: not started, in progress, implemented, tested, blocked. A feature is not "tested" unless the exact test was executed and its result observed.
+Status vocabulary: implemented (code exists), tested (executed with observed result), blocked, not started. Code presence is not evidence of runtime correctness.
 
-| Area | Status | Relevant files | Implementation / evidence | Tests actually executed | Known issues / next action |
+| Area | Status | Files | Implemented / evidence | Tests actually executed | Remaining |
 |---|---|---|---|---|---|
-| Repository inspection | implemented | GitHub repository metadata | Repository was empty (size 0); no files or README; commit listing returned HTTP 409 because no commits existed. | GitHub metadata and file search executed. | Bootstrap repository. |
-| Permanent documentation | in progress | PROJECT_STATE.md, TESTING_GUIDE.md, IMPLEMENTATION_LOG.md | Create docs before application implementation; reconcile after code exists. | Not run (documentation only). | Verify commands against actual code. |
-| Database and migrations | not started | app/db, migrations | No implementation at initial inspection. | Not run. | Implement SQLAlchemy models and Alembic. |
-| PDF ingestion / extraction | not started | app/ingestion, app/llm | No implementation at initial inspection. | Not run. | Real provider only; OCR optional dependency. |
-| P2P tools / matching | not started | app/tools, app/domain | No implementation at initial inspection. | Not run. | Decimal-based deterministic matching. |
-| LangGraph / human review | not started | app/agent | No implementation at initial inspection. | Not run. | Checkpointed interrupt/resume; human authorization. |
-| Events / tracing | not started | app/observability | No implementation at initial inspection. | Not run. | Persist events; optional real Langfuse. |
-| Evaluation | not started | app/evaluation | No implementation at initial inspection. | Not run. | Separate ground truth; no fabricated metrics. |
-| Streamlit console | not started | console | No implementation at initial inspection. | Not run. | HTTP client only. |
-| Tests / CI / Docker | not started | tests, .github, Dockerfile | No implementation at initial inspection. | Not run. | Separate unit, PostgreSQL and live-provider suites. |
+| Repository inspection | implemented | GitHub metadata | Empty repo, zero files, no commits initially; write permission confirmed. | Repository metadata and code search. | None. |
+| Permanent docs | implemented | PROJECT_STATE.md, TESTING_GUIDE.md, IMPLEMENTATION_LOG.md | Created before application files; updated to describe actual state. | Not applicable. | Keep updated. |
+| Foundation / config | implemented | pyproject.toml, .env.example, app/config.py, app/db.py | Settings, SQLAlchemy engine/session and dependencies. | NOT RUN. | Runtime verification. |
+| DB schema / migration | implemented | app/models.py, alembic.ini, migrations/ | Vendor, PO, GRN, invoice, policy, case, run/event/evaluation-run models; initial metadata migration. | NOT RUN; no PostgreSQL available to this editing session. | Apply migration and add schema tests. |
+| PDF / LLM extraction | implemented, partial | app/ingestion.py, app/llm.py, app/schemas.py, app/main.py | PyMuPDF, Tesseract fallback, real OpenAI-compatible JSON-schema request, Pydantic validation. Extracted result is not persisted. | NOT RUN; no credentials or runtime. | Live-provider tests, OCR test, persistence/review workflow. |
+| Deterministic matching | implemented, partial | app/matching.py | Decimal matching, quantity/price, GRN received, currency, totals, vendor/duplicate flags; missing records fail closed. | NOT RUN. Four fixed unit tests committed. | DB-backed record resolution, tax policy and relationship checks. |
+| P2P tools | implemented, partial | app/tools.py | Nine actual SQLAlchemy application functions. | NOT RUN. | Authorization, tool schema integration and DB tests. |
+| FastAPI | implemented, partial | app/main.py | Health/readiness, upload, match, invoice list and case list. | NOT RUN. | CRUD, authentication, persistence workflow, API tests. |
+| LangGraph / human review | not started | dependency only | No production graph, checkpoint or reviewer approval flow. | NOT RUN. | Implement durable interrupt/resume and authorization. |
+| Events / traces | not started | AgentEvent model only | Event table exists; no event writer, SSE, Langfuse or OTel. | NOT RUN. | Event architecture and trace integration. |
+| Evaluation | not started | EvaluationRun model only | No dataset, ground truth, CLI, evaluator or metrics. | NOT RUN. | Build deterministic and live evaluation engine. |
+| Streamlit | implemented, partial | console/app.py | HTTP-backed PDF, match and case tabs. | NOT RUN. | Run explorer, evaluation, dataset, experiments, health. |
+| Docker / CI | implemented, unverified | Dockerfile, docker-compose.yml, .github/workflows/ci.yml | Basic API image, PostgreSQL Compose and unit CI workflow. | NOT RUN; CI has not run. | Verify build and workflow; migration startup. |
+| Tests | implemented, unverified | tests/test_matching.py | Four deterministic tests, no mocks. | NOT RUN in this session. | Add PostgreSQL, live provider and E2E suites. |
 
-## Execution notes
-- Initial inspection date: 2026-11-24.
-- Repository: https://github.com/tanishapritha/p2p-agent
-- Default branch: main.
-- GitHub permissions: admin/maintain/push confirmed.
-- Initial GitHub commit SHA after creating this log's companion project-state document: 5a0fe464f65ce74b444ef967f57bb7397164e7f4.
-- No local shell, PostgreSQL instance or user LLM credentials are available through the GitHub repository connector. Do not claim local test execution.
+## Commits
+- Documentation bootstrap: 5a0fe464f65ce74b444ef967f57bb7397164e7f4
+- Documentation guide: de8ac984d0e6c3550172bebfa5f1566e3b59c4e3
+- Implementation log: bb93719d3e28cff49860567eab220a256515d3ba
+- Subsequent files were committed directly to main as individual GitHub contents commits. The latest known commit is recorded in the final report.
+
+## Execution environment and test evidence
+This work used the GitHub repository connector. It can inspect and commit repository files but does not provide a local shell, installed dependencies, PostgreSQL server, Docker daemon or user LLM credentials. Therefore no pytest, Ruff, Alembic, Docker or live LLM command was executed here. All such checks are **NOT RUN**, not passed. Live extraction is blocked until a real API key is configured.
+
+## Next actions
+1. Verify install, Ruff, pytest and Alembic locally.
+2. Fix any runtime/type/schema issues discovered.
+3. Add DB-backed invoice persistence and verified PO/GRN/vendor retrieval.
+4. Implement LangGraph tool loop with durable checkpoints and authorized human review.
+5. Add event/SSE/trace pipeline and real evaluation dataset/CLI.
+6. Expand console and integration/live/E2E test coverage.
