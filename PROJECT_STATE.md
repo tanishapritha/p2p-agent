@@ -1,6 +1,6 @@
 # Project State
 
-> This file is the accurate committed status. Implemented code is not the same as tested code. No local commands have been executed in this remote-editing session.
+> This file reflects the committed source snapshot. Code existence is not proof of runtime correctness. No local tests or app commands have been executed in this editing session.
 
 ## System
 A modular FastAPI + PostgreSQL + SQLAlchemy app. PDF invoice text extraction and OCR fallback, real OpenAI-compatible structured extraction, deterministic financial matching, and a LangGraph workflow that resolves invoice-linked records and persists run/event data. Streamlit workbench calls API endpoints. The system is recommendation/review only and never executes payments.
@@ -38,7 +38,7 @@ No scores are claimed because the evaluator has not been run here.
 
 ## Still incomplete / risk
 - No local execution, pytest, Ruff, Alembic, Docker or CI run performed; no observed passing checks. GitHub commit workflow/status retrieval returned no workflow runs/statuses.
-- Upload extraction remains non-persistent until a human calls invoice confirmation. No master-data import/UI exists; development-only API entry endpoints are present. The confirmation endpoint trusts the supplied reviewer string and does not authenticate that person. The confirmation endpoint trusts the supplied reviewer string and does not authenticate that person.
+- Upload extraction remains non-persistent until a human calls invoice confirmation. No master-data import/UI exists; development-only API entry endpoints are present. Invoice confirmation and review endpoints trust caller-supplied reviewer identifiers and do not authenticate identity.
 - No LangGraph durable checkpoint/resume, conditional recovery/ retry logic, or LLM-driven investigation/tool-calling loop. This is a deterministic LangGraph workflow, not autonomous AI decision-making.
 - Human review API lacks authentication/authorization and reviewer identity verification. It is not safe for public deployment.
 - No trace telemetry, SSE, Langfuse/OTel, full agent evaluation, integration/live/E2E tests, security hardening or production ops.
