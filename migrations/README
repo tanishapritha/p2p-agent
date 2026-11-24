@@ -1,0 +1,1 @@
+Alembic migration scripts. Run `alembic upgrade head` after configuring DATABASE_URL. The initial migration creates the SQLAlchemy metadata defined in app.models. Review future schema changes as explicit revisions; do not edit an already-applied migration.
