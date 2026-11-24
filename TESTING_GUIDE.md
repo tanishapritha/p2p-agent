@@ -101,7 +101,7 @@ Run the current no-credential deterministic tests:
 ```powershell
 pytest tests/test_matching.py -q
 ```
-There are four unit tests. No PostgreSQL integration, real-provider test, LangGraph behavior, security, E2E or trace tests currently exist. Do not run marker commands expecting nonexistent suites.
+There are four matcher unit tests plus one evaluator test over the labeled synthetic dataset (five tests total). No PostgreSQL integration, real-provider test, LangGraph behavior, security, E2E or trace tests currently exist. Do not run marker commands expecting nonexistent suites.
 
 Quality check:
 ```powershell
