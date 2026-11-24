@@ -89,8 +89,14 @@ class AgentRun(Base):
     __tablename__ = "agent_runs"
     id: Mapped[int] = mapped_column(primary_key=True)
     invoice_id: Mapped[int] = mapped_column(ForeignKey("invoices.id"))
-    status: Mapped[str] = mapped_column(String(32), default="PENDING")
+    status: Mapped[str] = mapped_column(String(32), default="PENDING", index=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(128), unique=True, nullable=True)
+    state_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    result_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    reviewer: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    review_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 
 class AgentEvent(Base):
     __tablename__ = "agent_events"
