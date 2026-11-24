@@ -23,7 +23,16 @@ def test_missing_po_never_approves():
 
 def test_duplicate_and_vendor_mismatch_hold():
     data = MatchInput(invoice_number="I-2", vendor_match=False, invoice_subtotal=0,
-        invoice_total=0, invoice_lines=[], po_found=True, grn_found=True, duplicate=True)
+        invoice_total=0, invoice_lines=[MatchLine(description="x", quantity=1, unit_price=0)],
+        po_found=True, grn_found=True, duplicate=True)
     result = run_three_way_match(data)
     assert result["recommendation"] == "HOLD_FOR_REVIEW"
     assert {e["type"] for e in result["exceptions"]} >= {"DUPLICATE_INVOICE","VENDOR_MISMATCH"}
+
+def test_empty_po_or_grn_lines_fail_closed():
+    data = MatchInput(invoice_number="I-3", vendor_match=True, invoice_subtotal=1,
+        invoice_total=1, invoice_lines=[MatchLine(description="x", quantity=1, unit_price=1)],
+        po_found=True, po_currency="INR", po_lines=[], grn_found=True, grn_lines=[])
+    result = run_three_way_match(data)
+    assert result["recommendation"] == "HOLD_FOR_REVIEW"
+    assert {e["type"] for e in result["exceptions"]} >= {"MISSING_PO_LINES","MISSING_GRN_LINES"}
