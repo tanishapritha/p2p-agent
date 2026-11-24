@@ -34,7 +34,7 @@ The initial migration creates tables declared in app.models. Verify using psql o
 ```powershell
 uvicorn app.main:app --reload
 ```
-Open http://127.0.0.1:8000/docs. Routes: GET /health, GET /ready, POST /invoices/upload, POST /invoices/confirm, POST /matching/evaluate, GET /invoices, GET /cases, POST /agent/invoices/{invoice_id}/run, GET /agent/runs/{run_id}, POST /agent/runs/{run_id}/review. /ready requires PostgreSQL; /health only reports process and whether an LLM key is configured.
+Open http://127.0.0.1:8000/docs. Routes: GET /health, GET /ready, POST /invoices/upload, POST /invoices/confirm, POST /master-data/vendors, POST /master-data/purchase-orders, POST /master-data/goods-receipts, POST /matching/evaluate, GET /invoices, GET /cases, POST /agent/invoices/{invoice_id}/run, GET /agent/runs/{run_id}, POST /agent/runs/{run_id}/review. /ready requires PostgreSQL; /health only reports process and whether an LLM key is configured.
 
 ## 5. Start Streamlit
 In another PowerShell terminal:
@@ -63,7 +63,18 @@ Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/matching/evaluate -Con
 ```
 Expected: quantity MATCH, price MISMATCH, PRICE_MISMATCH difference 50000.00, recommendation HOLD_FOR_REVIEW. This route currently accepts caller-supplied found/match flags; it is not a substitute for DB-verified matching.
 
-## 8. Agent run / review flow
+## 8. Local master-data entry
+The API supports development-only vendor, PO and goods-receipt entry. These routes are blocked unless APP_ENV=development. No authentication exists; do not expose this application to a public network.
+```powershell
+$v = Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/master-data/vendors -ContentType "application/json" -Body (@{code="V001";name="Local Test Vendor"} | ConvertTo-Json)
+$po = @{po_number="PO-LOCAL-1";vendor_id=$v.id;currency="INR";lines=@(@{description="paper";quantity="10";unit_price="100"})} | ConvertTo-Json -Depth 5
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/master-data/purchase-orders -ContentType "application/json" -Body $po
+$grn = @{grn_number="GRN-LOCAL-1";po_number="PO-LOCAL-1";lines=@(@{description="paper";quantity="10"})} | ConvertTo-Json -Depth 5
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/master-data/goods-receipts -ContentType "application/json" -Body $grn
+```
+Use only clearly labeled local test business records, not production transactions.
+
+## 9. Agent run / review flow
 The graph resolves invoice, PO and GRN records using the invoice's stored references, verifies PO vendor and GRN-to-PO linkage, then calls the deterministic matcher. It persists agent run/event records and returns AWAITING_HUMAN_REVIEW. The workflow is LangGraph orchestration, but it is not yet checkpointed across process restarts and it does not perform LLM-driven tool investigation.
 
 Example:
@@ -75,17 +86,17 @@ Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/agent/runs/1/review" 
 ```
 Review decisions are ACKNOWLEDGE or DISPUTE and only record review metadata. They are not payment authorization. Use an existing persisted invoice ID; the upload endpoint currently extracts but does not save invoices.
 
-## 9. Offline matcher evaluation
+## 10. Offline matcher evaluation
 The labeled synthetic dataset is explicitly a deterministic test/evaluation fixture, not production transaction data:
 ```powershell
 python -m app.evaluate --dataset eval/datasets/matching_v1.jsonl
 ```
 It reports case accuracy, hold recall, and false-approve count. Do not confuse matcher evaluation with full agent evaluation or live LLM quality.
 
-## 10. Tools and database
+## 11. Tools and database
 Typed DB functions are in app/tools.py and accept a real SQLAlchemy Session. They are not yet exposed through API or registered with an LLM. Create business records manually only for local development; there is no seed dataset or CRUD API yet.
 
-## 11. Tests actually available
+## 12. Tests actually available
 Run the current no-credential deterministic tests:
 ```powershell
 pytest tests/test_matching.py -q
@@ -98,7 +109,7 @@ ruff check .
 ```
 The repository does not currently configure a formatter/type checker gate. Record exact output and exit code in IMPLEMENTATION_LOG.md. Tests have not been executed by the remote editing session.
 
-## 12. Docker
+## 13. Docker
 Ensure .env exists first:
 ```powershell
 docker compose up --build
@@ -107,7 +118,7 @@ docker compose down
 ```
 Compose starts PostgreSQL and the API. The database volume persists. Docker startup/migration behavior must be verified locally.
 
-## 13. Not yet available
+## 14. Not yet available
 - LangGraph real agent run and tool-calling workflow.
 - Human approval, authorization and checkpoint resume.
 - Run/event history, SSE, Langfuse and OpenTelemetry traces.
@@ -115,7 +126,7 @@ Compose starts PostgreSQL and the API. The database volume persists. Docker star
 - Dataset manager, experiments, full run explorer and system-health metrics.
 - Authenticated APIs and production deployment controls.
 
-## 14. Troubleshooting
+## 15. Troubleshooting
 - PostgreSQL connection refused: start the service and check DATABASE_URL.
 - Alembic error: check database exists and DATABASE_URL points to the intended instance.
 - LLM 401/403: verify key, provider URL, model access and quota.
