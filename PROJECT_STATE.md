@@ -16,7 +16,7 @@ A modular FastAPI + PostgreSQL + SQLAlchemy app. PDF invoice text extraction and
 - `app/models.py`, Alembic migrations 0001/0002: domain tables plus agent run state/result, idempotency key, reviewer/note, update timestamp.
 - `console/app.py`: Streamlit PDF extraction, match test, case display, run explorer and review form.
 - `app/evaluate.py`, `eval/datasets/matching_v1.jsonl`: offline deterministic matcher evaluation over labeled synthetic cases (not production transaction data).
-- `tests/test_matching.py`: four deterministic matcher unit tests.
+- ``tests/test_matching.py`, `tests/test_evaluate.py`: four matcher unit tests plus one synthetic dataset evaluator test.
 - Docker, Compose and GitHub Actions CI scaffold.
 
 ## Agent behavior
