@@ -34,7 +34,7 @@ The initial migration creates tables declared in app.models. Verify using psql o
 ```powershell
 uvicorn app.main:app --reload
 ```
-Open http://127.0.0.1:8000/docs. Routes: GET /health, GET /ready, POST /invoices/upload, POST /matching/evaluate, GET /invoices, GET /cases. /ready requires PostgreSQL; /health only reports process and whether an LLM key is configured.
+Open http://127.0.0.1:8000/docs. Routes: GET /health, GET /ready, POST /invoices/upload, POST /matching/evaluate, GET /invoices, GET /cases, POST /agent/invoices/{invoice_id}/run, GET /agent/runs/{run_id}, POST /agent/runs/{run_id}/review. /ready requires PostgreSQL; /health only reports process and whether an LLM key is configured.
 
 ## 5. Start Streamlit
 In another PowerShell terminal:
@@ -63,10 +63,29 @@ Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/matching/evaluate -Con
 ```
 Expected: quantity MATCH, price MISMATCH, PRICE_MISMATCH difference 50000.00, recommendation HOLD_FOR_REVIEW. This route currently accepts caller-supplied found/match flags; it is not a substitute for DB-verified matching.
 
-## 8. Tools and database
+## 8. Agent run / review flow
+The graph resolves invoice, PO and GRN records using the invoice's stored references, verifies PO vendor and GRN-to-PO linkage, then calls the deterministic matcher. It persists agent run/event records and returns AWAITING_HUMAN_REVIEW. The workflow is LangGraph orchestration, but it is not yet checkpointed across process restarts and it does not perform LLM-driven tool investigation.
+
+Example:
+```powershell
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/agent/invoices/1/run"
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/agent/runs/1"
+$review = @{ reviewer="reviewer@example.local"; decision="ACKNOWLEDGE"; note="Reviewed match evidence." } | ConvertTo-Json
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/agent/runs/1/review" -ContentType "application/json" -Body $review
+```
+Review decisions are ACKNOWLEDGE or DISPUTE and only record review metadata. They are not payment authorization. Use an existing persisted invoice ID; the upload endpoint currently extracts but does not save invoices.
+
+## 9. Offline matcher evaluation
+The labeled synthetic dataset is explicitly a deterministic test/evaluation fixture, not production transaction data:
+```powershell
+python -m app.evaluate --dataset eval/datasets/matching_v1.jsonl
+```
+It reports case accuracy, hold recall, and false-approve count. Do not confuse matcher evaluation with full agent evaluation or live LLM quality.
+
+## 10. Tools and database
 Typed DB functions are in app/tools.py and accept a real SQLAlchemy Session. They are not yet exposed through API or registered with an LLM. Create business records manually only for local development; there is no seed dataset or CRUD API yet.
 
-## 9. Tests actually available
+## 11. Tests actually available
 Run the current no-credential deterministic tests:
 ```powershell
 pytest tests/test_matching.py -q
@@ -79,7 +98,7 @@ ruff check .
 ```
 The repository does not currently configure a formatter/type checker gate. Record exact output and exit code in IMPLEMENTATION_LOG.md. Tests have not been executed by the remote editing session.
 
-## 10. Docker
+## 12. Docker
 Ensure .env exists first:
 ```powershell
 docker compose up --build
@@ -88,7 +107,7 @@ docker compose down
 ```
 Compose starts PostgreSQL and the API. The database volume persists. Docker startup/migration behavior must be verified locally.
 
-## 11. Not yet available
+## 13. Not yet available
 - LangGraph real agent run and tool-calling workflow.
 - Human approval, authorization and checkpoint resume.
 - Run/event history, SSE, Langfuse and OpenTelemetry traces.
@@ -96,7 +115,7 @@ Compose starts PostgreSQL and the API. The database volume persists. Docker star
 - Dataset manager, experiments, full run explorer and system-health metrics.
 - Authenticated APIs and production deployment controls.
 
-## 12. Troubleshooting
+## 14. Troubleshooting
 - PostgreSQL connection refused: start the service and check DATABASE_URL.
 - Alembic error: check database exists and DATABASE_URL points to the intended instance.
 - LLM 401/403: verify key, provider URL, model access and quota.
