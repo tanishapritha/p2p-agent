@@ -84,7 +84,11 @@ def deterministic_match(state: WorkflowState) -> WorkflowState:
             result["recommendation"]="HOLD_FOR_REVIEW"
         state["match_result"]=result
         state["status"]="MATCHED"
-        event_db=SessionLocal()\n        try:\n            _event(event_db,state["run_id"],"deterministic_match","SUCCEEDED",{"exception_count":len(result["exceptions"])})\n        finally:\n            event_db.close()
+        event_db=SessionLocal()
+        try:
+            _event(event_db,state["run_id"],"deterministic_match","SUCCEEDED",{"exception_count":len(result["exceptions"])})
+        finally:
+            event_db.close()
         return state
     except Exception as exc:
         state["status"]="FAILED";state["error"]=str(exc)
