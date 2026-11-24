@@ -24,7 +24,7 @@ The graph loads invoice by ID, resolves the invoice's PO and GRN references, che
 
 ## Routes
 - `GET /health`, `GET /ready`
-- `POST /invoices/upload` — extraction only; not persisted\n- `POST /invoices/confirm` — human-confirmed extracted data is persisted after vendor ID validation
+- `POST /invoices/upload` — extraction only; not persisted\n- `POST /invoices/confirm` — human-confirmed extracted data is persisted after vendor ID validation\n- `POST /master-data/vendors`, `/master-data/purchase-orders`, `/master-data/goods-receipts` — development-only local master-data entry
 - `POST /matching/evaluate` — caller-supplied payload; not authoritative
 - `GET /invoices`, `GET /cases`
 - `POST /agent/invoices/{invoice_id}/run`
@@ -38,7 +38,7 @@ No scores are claimed because the evaluator has not been run here.
 
 ## Still incomplete / risk
 - No local execution, pytest, Ruff, Alembic, Docker or CI run performed; no observed passing checks. GitHub commit workflow/status retrieval returned no workflow runs/statuses.
-- Upload extraction remains non-persistent until a human calls invoice confirmation. No CRUD/master-data entry/import UI exists. The confirmation endpoint trusts the supplied reviewer string and does not authenticate that person.
+- Upload extraction remains non-persistent until a human calls invoice confirmation. No master-data import/UI exists; development-only API entry endpoints are present. The confirmation endpoint trusts the supplied reviewer string and does not authenticate that person. The confirmation endpoint trusts the supplied reviewer string and does not authenticate that person.
 - No LangGraph durable checkpoint/resume, conditional recovery/ retry logic, or LLM-driven investigation/tool-calling loop. This is a deterministic LangGraph workflow, not autonomous AI decision-making.
 - Human review API lacks authentication/authorization and reviewer identity verification. It is not safe for public deployment.
 - No trace telemetry, SSE, Langfuse/OTel, full agent evaluation, integration/live/E2E tests, security hardening or production ops.
