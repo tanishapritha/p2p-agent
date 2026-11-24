@@ -10,7 +10,7 @@ from app.models import Invoice, ExceptionCase
 from app.matching import MatchInput, run_three_way_match
 from app.ingestion import extract_pdf_text, PDFIngestionError
 from app.llm import extract_invoice_with_llm, LLMNotConfigured
-from app.schemas import ExtractedInvoice\nfrom app.models import AgentRun, AgentEvent, Vendor, Invoice, InvoiceLine\nfrom app.agent import run_invoice_agent\nfrom datetime import datetime, timezone
+from app.schemas import ExtractedInvoice\nfrom app.models import AgentRun, AgentEvent, Vendor, Invoice, InvoiceLine, PurchaseOrder, POLine, GoodsReceipt, GRNLine\nfrom app.agent import run_invoice_agent\nfrom datetime import datetime, timezone
 
 app = FastAPI(title="P2P Invoice Exception Agent", version="0.1.0")
 
@@ -52,6 +52,65 @@ async def upload_invoice(file: UploadFile = File(...)):
             "usage":usage, "fields":validated.model_dump(mode="json"),
             "note":"Extraction is untrusted until reviewed and linked to verified business records."}
 
+
+
+class VendorCreate(BaseModel):
+    code: str = Field(min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=255)
+
+class MasterLine(BaseModel):
+    description: str = Field(min_length=1, max_length=255)
+    quantity: float = Field(gt=0)
+    unit_price: float = Field(ge=0)
+
+class POCreate(BaseModel):
+    po_number: str = Field(min_length=1, max_length=64)
+    vendor_id: int = Field(gt=0)
+    currency: str = Field(default="INR", min_length=3, max_length=3)
+    lines: list[MasterLine] = Field(min_length=1)
+
+class GRNCreate(BaseModel):
+    grn_number: str = Field(min_length=1, max_length=64)
+    po_number: str = Field(min_length=1, max_length=64)
+    lines: list[MasterLine] = Field(min_length=1)
+
+def _require_local_master_data():
+    if settings.app_env.lower() != "development":
+        raise HTTPException(403,"Master-data entry API is disabled outside APP_ENV=development")
+
+@app.post("/master-data/vendors")
+def create_vendor(payload: VendorCreate, db: Session = Depends(get_db)):
+    _require_local_master_data()
+    if db.scalar(select(Vendor.id).where(Vendor.code==payload.code)):
+        raise HTTPException(409,"Vendor code already exists")
+    vendor=Vendor(code=payload.code,name=payload.name)
+    db.add(vendor);db.commit();db.refresh(vendor)
+    return {"id":vendor.id,"code":vendor.code,"name":vendor.name}
+
+@app.post("/master-data/purchase-orders")
+def create_purchase_order(payload: POCreate, db: Session = Depends(get_db)):
+    _require_local_master_data()
+    if not db.get(Vendor,payload.vendor_id):
+        raise HTTPException(404,"Vendor ID does not exist")
+    if db.scalar(select(PurchaseOrder.id).where(PurchaseOrder.po_number==payload.po_number)):
+        raise HTTPException(409,"PO number already exists")
+    po=PurchaseOrder(po_number=payload.po_number,vendor_id=payload.vendor_id,currency=payload.currency.upper(),
+        lines=[POLine(description=line.description,quantity=line.quantity,unit_price=line.unit_price) for line in payload.lines])
+    db.add(po);db.commit();db.refresh(po)
+    return {"id":po.id,"po_number":po.po_number,"vendor_id":po.vendor_id}
+
+@app.post("/master-data/goods-receipts")
+def create_goods_receipt(payload: GRNCreate, db: Session = Depends(get_db)):
+    _require_local_master_data()
+    po=db.scalar(select(PurchaseOrder).where(PurchaseOrder.po_number==payload.po_number))
+    if not po:
+        raise HTTPException(404,"PO number not found")
+    if db.scalar(select(GoodsReceipt.id).where(GoodsReceipt.grn_number==payload.grn_number)):
+        raise HTTPException(409,"GRN number already exists")
+    grn=GoodsReceipt(po_id=po.id,grn_number=payload.grn_number,
+        lines=[GRNLine(description=line.description,quantity_received=line.quantity) for line in payload.lines])
+    db.add(grn);db.commit();db.refresh(grn)
+    return {"id":grn.id,"grn_number":grn.grn_number,"po_number":payload.po_number}
 
 class ConfirmInvoiceRequest(ExtractedInvoice):
     vendor_id: int = Field(gt=0)
