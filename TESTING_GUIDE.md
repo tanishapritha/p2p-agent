@@ -1,6 +1,6 @@
 # Testing Guide — Windows PowerShell
 
-This guide intentionally lists only commands and functionality that exist in the repository today. The full LangGraph agent, evaluation CLI, human approval/resume and trace explorer are not implemented; do not try to infer or simulate them.
+This guide lists available commands and current limitations. The deterministic LangGraph run flow and offline matcher evaluator exist, but are unverified; durable checkpoint resume, LLM tool investigation and full agent evaluation are not implemented.
 
 ## 1. Prerequisites
 - Windows 10/11, Git, Python 3.11+, PostgreSQL 15+.
@@ -42,7 +42,7 @@ In another PowerShell terminal:
 .\.venv\Scripts\Activate.ps1
 streamlit run console/app.py
 ```
-Use the sidebar Backend URL. The console exposes PDF extraction, deterministic match and case listing. It is a small workbench, not the full requested developer console.
+Use the sidebar Backend URL. The console exposes PDF extraction, deterministic matching, cases, agent run/event retrieval and human review record. It remains a small workbench, not a full developer console.
 
 ## 6. PDF ingestion and real extraction
 Use a valid invoice PDF and POST it to /invoices/upload as multipart field file, or upload it in Streamlit. Text PDFs use PyMuPDF; scanned PDFs use Tesseract if installed. The endpoint calls the configured real LLM and validates its structured output. Missing LLM_API_KEY returns 503; provider failures return 502; invalid PDFs return 422. Successful extraction returns EXTRACTED_NOT_PERSISTED: no invoice/vendor is automatically created and the temporary PDF is removed. After reviewing the extracted JSON and selecting a verified vendor ID, send it to POST /invoices/confirm (include confirmed_by) to save the invoice. This API does not authenticate reviewer identity. This is deliberate until source-record review and persistence are implemented.
