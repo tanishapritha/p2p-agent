@@ -10,7 +10,11 @@ from app.models import Invoice, ExceptionCase
 from app.matching import MatchInput, run_three_way_match
 from app.ingestion import extract_pdf_text, PDFIngestionError
 from app.llm import extract_invoice_with_llm, LLMNotConfigured
-from app.schemas import ExtractedInvoice\nfrom app.models import AgentRun, AgentEvent, Vendor, Invoice, InvoiceLine, PurchaseOrder, POLine, GoodsReceipt, GRNLine\nfrom app.agent import run_invoice_agent\nfrom datetime import datetime, timezone\nfrom decimal import Decimal
+from app.schemas import ExtractedInvoice
+from app.models import AgentRun, AgentEvent, Vendor, Invoice, InvoiceLine, PurchaseOrder, POLine, GoodsReceipt, GRNLine
+from app.agent import run_invoice_agent
+from datetime import datetime, timezone
+from decimal import Decimal
 
 app = FastAPI(title="P2P Invoice Exception Agent", version="0.1.0")
 
@@ -60,8 +64,8 @@ class VendorCreate(BaseModel):
 
 class MasterLine(BaseModel):
     description: str = Field(min_length=1, max_length=255)
-    quantity: float = Field(gt=0)
-    unit_price: float = Field(ge=0)
+    quantity: Decimal = Field(gt=Decimal("0"))
+    unit_price: Decimal = Field(ge=Decimal("0"))
 
 class POCreate(BaseModel):
     po_number: str = Field(min_length=1, max_length=64)
@@ -69,10 +73,14 @@ class POCreate(BaseModel):
     currency: str = Field(default="INR", min_length=3, max_length=3)
     lines: list[MasterLine] = Field(min_length=1)
 
+class GRNLineInput(BaseModel):
+    description: str = Field(min_length=1, max_length=255)
+    quantity: Decimal = Field(gt=Decimal("0"))
+
 class GRNCreate(BaseModel):
     grn_number: str = Field(min_length=1, max_length=64)
     po_number: str = Field(min_length=1, max_length=64)
-    lines: list[MasterLine] = Field(min_length=1)
+    lines: list[GRNLineInput] = Field(min_length=1)
 
 def _require_local_master_data():
     if settings.app_env.lower() != "development":
