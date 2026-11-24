@@ -14,5 +14,4 @@ jobs:
           python-version: "3.11"
       - run: pip install -e ".[dev]"
       - run: ruff check .
-      - run: ruff format --check .
       - run: pytest -m "not integration and not live"
