@@ -10,7 +10,7 @@ if st.sidebar.button("Check backend"):
         st.sidebar.json(requests.get(base + "/health", timeout=5).json())
     except requests.RequestException as exc:
         st.sidebar.error(str(exc))
-tab1, tab2, tab3 = st.tabs(["PDF extraction", "Deterministic match", "Cases"])
+tab1, tab2, tab3, tab4 = st.tabs(["PDF extraction", "Deterministic match", "Cases", "Agent runs"])
 with tab1:
     upload = st.file_uploader("Invoice PDF", type=["pdf"])
     if upload and st.button("Extract with configured real LLM"):
@@ -31,3 +31,34 @@ with tab3:
         except requests.RequestException as exc:
             st.error(str(exc))
 st.warning("Developer console only. Recommendations are not approvals. Payment execution is not supported.")
+
+with tab4:
+    st.subheader("Run an invoice investigation")
+    invoice_id=st.number_input("Persisted invoice ID",min_value=1,step=1)
+    idem=st.text_input("Optional idempotency key",help="Reuse this key to avoid starting a duplicate run.")
+    if st.button("Run LangGraph workflow"):
+        try:
+            params={"idempotency_key":idem} if idem.strip() else {}
+            response=requests.post(f"{base}/agent/invoices/{int(invoice_id)}/run",params=params,timeout=60)
+            st.json(response.json())
+            if response.ok and response.json().get("run_id"):
+                st.session_state["p2p_last_run_id"]=response.json()["run_id"]
+        except requests.RequestException as exc:
+            st.error(str(exc))
+    run_id=st.number_input("Inspect run ID",min_value=0,step=1,value=int(st.session_state.get("p2p_last_run_id",0)))
+    if st.button("Fetch audit events") and run_id:
+        try:
+            st.json(requests.get(f"{base}/agent/runs/{int(run_id)}",timeout=15).json())
+        except requests.RequestException as exc:
+            st.error(str(exc))
+    st.markdown("#### Record reviewer acknowledgement or dispute")
+    reviewer=st.text_input("Reviewer name/identifier")
+    decision=st.selectbox("Review decision",["ACKNOWLEDGE","DISPUTE"])
+    note=st.text_area("Review note")
+    if st.button("Submit review record") and run_id:
+        try:
+            response=requests.post(f"{base}/agent/runs/{int(run_id)}/review",
+                json={"reviewer":reviewer,"decision":decision,"note":note},timeout=15)
+            st.code(response.text)
+        except requests.RequestException as exc:
+            st.error(str(exc))
