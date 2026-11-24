@@ -34,7 +34,7 @@ The initial migration creates tables declared in app.models. Verify using psql o
 ```powershell
 uvicorn app.main:app --reload
 ```
-Open http://127.0.0.1:8000/docs. Routes: GET /health, GET /ready, POST /invoices/upload, POST /matching/evaluate, GET /invoices, GET /cases, POST /agent/invoices/{invoice_id}/run, GET /agent/runs/{run_id}, POST /agent/runs/{run_id}/review. /ready requires PostgreSQL; /health only reports process and whether an LLM key is configured.
+Open http://127.0.0.1:8000/docs. Routes: GET /health, GET /ready, POST /invoices/upload, POST /invoices/confirm, POST /matching/evaluate, GET /invoices, GET /cases, POST /agent/invoices/{invoice_id}/run, GET /agent/runs/{run_id}, POST /agent/runs/{run_id}/review. /ready requires PostgreSQL; /health only reports process and whether an LLM key is configured.
 
 ## 5. Start Streamlit
 In another PowerShell terminal:
@@ -45,7 +45,7 @@ streamlit run console/app.py
 Use the sidebar Backend URL. The console exposes PDF extraction, deterministic match and case listing. It is a small workbench, not the full requested developer console.
 
 ## 6. PDF ingestion and real extraction
-Use a valid invoice PDF and POST it to /invoices/upload as multipart field file, or upload it in Streamlit. Text PDFs use PyMuPDF; scanned PDFs use Tesseract if installed. The endpoint calls the configured real LLM and validates its structured output. Missing LLM_API_KEY returns 503; provider failures return 502; invalid PDFs return 422. Successful extraction returns EXTRACTED_NOT_PERSISTED: no invoice/vendor is automatically created and the temporary PDF is removed. This is deliberate until source-record review and persistence are implemented.
+Use a valid invoice PDF and POST it to /invoices/upload as multipart field file, or upload it in Streamlit. Text PDFs use PyMuPDF; scanned PDFs use Tesseract if installed. The endpoint calls the configured real LLM and validates its structured output. Missing LLM_API_KEY returns 503; provider failures return 502; invalid PDFs return 422. Successful extraction returns EXTRACTED_NOT_PERSISTED: no invoice/vendor is automatically created and the temporary PDF is removed. After reviewing the extracted JSON and selecting a verified vendor ID, send it to POST /invoices/confirm (include confirmed_by) to save the invoice. This API does not authenticate reviewer identity. This is deliberate until source-record review and persistence are implemented.
 
 ## 7. Test deterministic matching
 Open POST /matching/evaluate in Swagger or send a JSON body. Example PowerShell:
