@@ -1,117 +1,106 @@
-# Testing Guide (Windows PowerShell)
+# Testing Guide — Windows PowerShell
 
-This guide describes the repository's actual commands. Features marked unavailable below are not silently simulated; use the implementation status in PROJECT_STATE.md.
+This guide intentionally lists only commands and functionality that exist in the repository today. The full LangGraph agent, evaluation CLI, human approval/resume and trace explorer are not implemented; do not try to infer or simulate them.
 
 ## 1. Prerequisites
 - Windows 10/11, Git, Python 3.11+, PostgreSQL 15+.
-- Optional: Tesseract OCR installed and on PATH.
-- A real LLM provider API key for extraction and agent runs.
-- Optional Langfuse credentials for external traces.
+- Optional OCR: Tesseract installed and available on PATH (or set TESSERACT_CMD).
+- A real OpenAI-compatible API key and model for PDF extraction.
+- Docker Desktop only if using Compose.
 
-## 2. Environment
+## 2. Clone and environment
 ```powershell
 git clone https://github.com/tanishapritha/p2p-agent.git
 cd p2p-agent
 py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-```
-Install dependencies using the repository's requirements file when present. Copy configuration:
-```powershell
+pip install -e ".[dev]"
 Copy-Item .env.example .env
 notepad .env
 ```
-Never commit .env. Set DATABASE_URL to your local PostgreSQL database and configure the provider key/model only for live LLM operations.
+Set DATABASE_URL, LLM_API_KEY and LLM_MODEL as needed. LLM_BASE_URL defaults to the OpenAI API root. Never commit .env.
 
 ## 3. PostgreSQL and migrations
-Create a database and user in PostgreSQL, then set DATABASE_URL in .env. Start the PostgreSQL Windows service from Services or:
+Create a local database/user matching DATABASE_URL. Start the PostgreSQL service (adjust service name/version):
 ```powershell
 Get-Service *postgres*
 Start-Service postgresql-x64-15
-```
-Use the installed service name if it differs. Run migrations with the repository's Alembic configuration:
-```powershell
 alembic upgrade head
 ```
-If migrations are not yet present, do not substitute create_all and call it a migration; check PROJECT_STATE.md.
+The initial migration creates tables declared in app.models. Verify using psql or pgAdmin. Migration application has not been run by the repository author in this remote session.
 
-## 4. Backend
+## 4. Start the API
 ```powershell
 uvicorn app.main:app --reload
 ```
-Open http://127.0.0.1:8000/docs and call the health endpoint. Use the exact module path/routes in the current source if they differ.
+Open http://127.0.0.1:8000/docs. Routes: GET /health, GET /ready, POST /invoices/upload, POST /matching/evaluate, GET /invoices, GET /cases. /ready requires PostgreSQL; /health only reports process and whether an LLM key is configured.
 
-## 5. Streamlit console
-In a second PowerShell:
+## 5. Start Streamlit
+In another PowerShell terminal:
 ```powershell
 .\.venv\Scripts\Activate.ps1
 streamlit run console/app.py
 ```
-Configure the console's backend URL if required. The console must call backend APIs; it must not implement financial calculations.
+Use the sidebar Backend URL. The console exposes PDF extraction, deterministic match and case listing. It is a small workbench, not the full requested developer console.
 
-## 6. PDF ingestion
-Upload a real invoice PDF using the documented upload endpoint or console. Text PDFs use PyMuPDF. Scanned PDFs require Tesseract. Extraction requires a configured real LLM provider. Confirm that the response identifies missing fields/uncertainty; malformed PDFs and missing credentials must return explicit failures, not fabricated data.
+## 6. PDF ingestion and real extraction
+Use a valid invoice PDF and POST it to /invoices/upload as multipart field file, or upload it in Streamlit. Text PDFs use PyMuPDF; scanned PDFs use Tesseract if installed. The endpoint calls the configured real LLM and validates its structured output. Missing LLM_API_KEY returns 503; provider failures return 502; invalid PDFs return 422. Successful extraction returns EXTRACTED_NOT_PERSISTED: no invoice/vendor is automatically created and the temporary PDF is removed. This is deliberate until source-record review and persistence are implemented.
 
-## 7. P2P tools and matching
-Use the documented tool CLI/API entry points where implemented. Insert synthetic business records into the actual PostgreSQL database before matching. The canonical example is INV-1042: 10 laptops at ₹55,000 versus PO-204 at ₹50,000, with 10 received. Expected deterministic result: quantity match, ₹50,000 pre-tax price variance, HOLD_FOR_REVIEW. Never infer test success from this expected value; run the test command and inspect its output.
-
-## 8. Real agent
-Start a run through the agent API/console. It must use the configured provider and actual application tools. Missing provider credentials mean BLOCKED. Inspect persisted run events and the Langfuse trace only when Langfuse is configured.
-
-## 9. Human review
-Inspect the generated case, authenticate as an authorized reviewer, submit a decision and resume the checkpoint. Confirm an agent identity cannot approve its own recommendation and no payment endpoint exists.
-
-## 10. Evaluations
-Offline evaluation means no evaluation SaaS, not no LLM. It still calls the configured real provider and actual database/tools:
+## 7. Test deterministic matching
+Open POST /matching/evaluate in Swagger or send a JSON body. Example PowerShell:
 ```powershell
-python -m app.evaluation.cli --mode offline
+$body = @{
+  invoice_number="INV-1042"; vendor_match=$true; currency="INR"
+  invoice_subtotal="550000"; invoice_tax="99000"; invoice_total="649000"
+  invoice_lines=@(@{description="laptop";quantity="10";unit_price="55000"})
+  po_found=$true; po_currency="INR"
+  po_lines=@(@{description="laptop";quantity="10";unit_price="50000"})
+  grn_found=$true
+  grn_lines=@(@{description="laptop";quantity="10";unit_price="0"})
+} | ConvertTo-Json -Depth 8
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/matching/evaluate -ContentType "application/json" -Body $body
 ```
-Live evaluation:
-```powershell
-python -m app.evaluation.cli --mode live
-```
-Use only CLI options actually exposed by the installed version. If the provider key/database is missing, record BLOCKED; never use a mock provider.
+Expected: quantity MATCH, price MISMATCH, PRICE_MISMATCH difference 50000.00, recommendation HOLD_FOR_REVIEW. This route currently accepts caller-supplied found/match flags; it is not a substitute for DB-verified matching.
 
-## 11. Tests and quality checks
-Run no-credential unit tests:
+## 8. Tools and database
+Typed DB functions are in app/tools.py and accept a real SQLAlchemy Session. They are not yet exposed through API or registered with an LLM. Create business records manually only for local development; there is no seed dataset or CRUD API yet.
+
+## 9. Tests actually available
+Run the current no-credential deterministic tests:
 ```powershell
-pytest -m "not integration and not live"
+pytest tests/test_matching.py -q
 ```
-PostgreSQL integration tests:
-```powershell
-$env:TEST_DATABASE_URL="postgresql+psycopg://user:password@localhost:5432/p2p_agent_test"
-pytest -m integration
-```
-Real-provider tests:
-```powershell
-pytest -m live
-```
-Optional tracing tests require Langfuse credentials. Run:
+There are four unit tests. No PostgreSQL integration, real-provider test, LangGraph behavior, security, E2E or trace tests currently exist. Do not run marker commands expecting nonexistent suites.
+
+Quality check:
 ```powershell
 ruff check .
-ruff format --check .
-mypy app
 ```
-Use the actual pyproject/pytest markers; do not interpret an uncollected marker as a passed test.
+The repository does not currently configure a formatter/type checker gate. Record exact output and exit code in IMPLEMENTATION_LOG.md. Tests have not been executed by the remote editing session.
 
-## 12. Docker
-When Docker assets are present:
+## 10. Docker
+Ensure .env exists first:
 ```powershell
 docker compose up --build
 docker compose logs -f
 docker compose down
 ```
-Persisted database volumes remain unless explicitly removed. Do not run destructive volume removal against data you need.
+Compose starts PostgreSQL and the API. The database volume persists. Docker startup/migration behavior must be verified locally.
 
-## 13. Expected results and troubleshooting
-- Database connection refused: start PostgreSQL and verify DATABASE_URL/port.
-- Migration error: inspect Alembic revision state and apply migrations in order.
-- Provider authentication/rate limit: verify key, provider, model access and quota; live run is BLOCKED otherwise.
-- Scanned PDF has no text: install Tesseract and configure its executable path.
-- Invalid PDF: use a valid PDF; ingestion should report a validation error.
-- No Langfuse trace: verify credentials and host; application events remain separately persisted.
-- Integration tests unavailable: report NOT RUN/BLOCKED, not passed.
-- Port conflict: change uvicorn/Streamlit port using their documented flags.
+## 11. Not yet available
+- LangGraph real agent run and tool-calling workflow.
+- Human approval, authorization and checkpoint resume.
+- Run/event history, SSE, Langfuse and OpenTelemetry traces.
+- Offline/live evaluation CLI, synthetic dataset and quality gates.
+- Dataset manager, experiments, full run explorer and system-health metrics.
+- Authenticated APIs and production deployment controls.
 
-## 14. Honest test reporting
-Record exact commands, exit codes and observed output in IMPLEMENTATION_LOG.md. Distinguish PASS, FAIL, BLOCKED and NOT RUN. Synthetic records are permitted test data; fake model responses, mocked DB integration and fabricated metrics are prohibited.
+## 12. Troubleshooting
+- PostgreSQL connection refused: start the service and check DATABASE_URL.
+- Alembic error: check database exists and DATABASE_URL points to the intended instance.
+- LLM 401/403: verify key, provider URL, model access and quota.
+- OCR fallback error: install Tesseract, pytesseract and Pillow; verify TESSERACT_CMD.
+- Invalid output: provider output failed Pydantic validation; inspect provider/model compatibility.
+- Upload rejected: file must be a PDF and within MAX_UPLOAD_MB.
+- Do not substitute mocked LLM calls, fake database results or fabricated traces when a dependency is unavailable. Record BLOCKED/NOT RUN.
