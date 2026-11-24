@@ -23,7 +23,7 @@ Status vocabulary: implemented (code exists), tested (executed with observed res
 - Documentation bootstrap: 5a0fe464f65ce74b444ef967f57bb7397164e7f4
 - Documentation guide: de8ac984d0e6c3550172bebfa5f1566e3b59c4e3
 - Implementation log: bb93719d3e28cff49860567eab220a256515d3ba
-- Subsequent files were committed directly to main as individual GitHub contents commits. The latest known commit is recorded in the final report.
+- Subsequent files were committed directly to main through the GitHub contents API (one file per commit). Latest commit at final inspection: 2ad2ec4969a88f96d10f987098ee9894060ea46b (fix: run database migrations in container startup). This is more granular than the preferred small number of commits; no history rewrite was attempted.
 
 ## Execution environment and test evidence
 This work used the GitHub repository connector. It can inspect and commit repository files but does not provide a local shell, installed dependencies, PostgreSQL server, Docker daemon or user LLM credentials. Therefore no pytest, Ruff, Alembic, Docker or live LLM command was executed here. All such checks are **NOT RUN**, not passed. Live extraction is blocked until a real API key is configured.
