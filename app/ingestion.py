@@ -1,10 +1,14 @@
-from pathlib import Path
 import shutil
+from pathlib import Path
+
 import fitz
+
 from app.config import settings
+
 
 class PDFIngestionError(ValueError):
     pass
+
 
 def extract_pdf_text(path: str) -> tuple[str, str]:
     file_path = Path(path)
@@ -20,16 +24,22 @@ def extract_pdf_text(path: str) -> tuple[str, str]:
     if text.strip():
         return text, "pymupdf"
     if not shutil.which(settings.tesseract_cmd):
-        raise PDFIngestionError("PDF contains no extractable text and Tesseract is unavailable; OCR is BLOCKED.")
+        raise PDFIngestionError(
+            "PDF contains no extractable text and Tesseract is unavailable; OCR is BLOCKED."
+        )
     try:
+        import io
+
         import pytesseract
         from PIL import Image
-        import io
+
         pages_text = []
         with fitz.open(file_path) as doc:
             for page in doc:
                 pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
-                pages_text.append(pytesseract.image_to_string(Image.open(io.BytesIO(pix.tobytes("png")))))
+                pages_text.append(
+                    pytesseract.image_to_string(Image.open(io.BytesIO(pix.tobytes("png"))))
+                )
         result = "\n".join(pages_text)
         if not result.strip():
             raise PDFIngestionError("OCR produced no text.")

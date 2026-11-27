@@ -1,11 +1,14 @@
 from decimal import Decimal
 from typing import Any
+
 from pydantic import BaseModel, Field
+
 
 class MatchLine(BaseModel):
     description: str
     quantity: Decimal = Field(gt=0)
     unit_price: Decimal = Field(ge=0)
+
 
 class MatchInput(BaseModel):
     invoice_number: str
@@ -21,11 +24,13 @@ class MatchInput(BaseModel):
     grn_found: bool
     grn_lines: list[MatchLine] = Field(default_factory=list)
     duplicate: bool = False
-    quantity_tolerance: Decimal = Decimal("0")
-    price_tolerance: Decimal = Decimal("0")
+    quantity_tolerance: Decimal = Decimal(0)
+    price_tolerance: Decimal = Decimal(0)
+
 
 def _money(value: Decimal) -> Decimal:
     return value.quantize(Decimal("0.01"))
+
 
 def run_three_way_match(data: MatchInput) -> dict[str, Any]:
     """Deterministic match. Missing/ambiguous source data always holds."""
@@ -54,37 +59,79 @@ def run_three_way_match(data: MatchInput) -> dict[str, Any]:
             qty_ok, price_ok = True, True
             for inv, po in zip(data.invoice_lines, data.po_lines):
                 if inv.description.casefold().strip() != po.description.casefold().strip():
-                    exceptions.append({"type": "AMBIGUOUS_DESCRIPTION", "invoice": inv.description, "po": po.description})
+                    exceptions.append(
+                        {
+                            "type": "AMBIGUOUS_DESCRIPTION",
+                            "invoice": inv.description,
+                            "po": po.description,
+                        }
+                    )
                     qty_ok = price_ok = False
                     continue
                 if abs(inv.quantity - po.quantity) > data.quantity_tolerance:
                     qty_ok = False
-                    exceptions.append({"type": "QUANTITY_MISMATCH", "description": inv.description,
-                                       "invoice_quantity": str(inv.quantity), "po_quantity": str(po.quantity)})
+                    exceptions.append(
+                        {
+                            "type": "QUANTITY_MISMATCH",
+                            "description": inv.description,
+                            "invoice_quantity": str(inv.quantity),
+                            "po_quantity": str(po.quantity),
+                        }
+                    )
                 if abs(inv.unit_price - po.unit_price) > data.price_tolerance:
                     price_ok = False
                     delta = _money((inv.unit_price - po.unit_price) * inv.quantity)
-                    exceptions.append({"type": "PRICE_MISMATCH", "description": inv.description,
-                                       "invoice_amount": str(_money(inv.unit_price * inv.quantity)),
-                                       "po_amount": str(_money(po.unit_price * inv.quantity)),
-                                       "difference": str(delta)})
+                    exceptions.append(
+                        {
+                            "type": "PRICE_MISMATCH",
+                            "description": inv.description,
+                            "invoice_amount": str(_money(inv.unit_price * inv.quantity)),
+                            "po_amount": str(_money(po.unit_price * inv.quantity)),
+                            "difference": str(delta),
+                        }
+                    )
             quantity_status = "MATCH" if qty_ok else "MISMATCH"
             price_status = "MATCH" if price_ok else "MISMATCH"
     if data.grn_found and data.grn_lines:
         for inv in data.invoice_lines:
-            received = sum((g.quantity for g in data.grn_lines
-                            if g.description.casefold().strip() == inv.description.casefold().strip()), Decimal("0"))
+            received = sum(
+                (
+                    g.quantity
+                    for g in data.grn_lines
+                    if g.description.casefold().strip() == inv.description.casefold().strip()
+                ),
+                Decimal(0),
+            )
             if received < inv.quantity - data.quantity_tolerance:
-                exceptions.append({"type": "QUANTITY_NOT_RECEIVED", "description": inv.description,
-                                   "invoice_quantity": str(inv.quantity), "received_quantity": str(received)})
-    computed_subtotal = _money(sum((line.quantity * line.unit_price for line in data.invoice_lines), Decimal("0")))
+                exceptions.append(
+                    {
+                        "type": "QUANTITY_NOT_RECEIVED",
+                        "description": inv.description,
+                        "invoice_quantity": str(inv.quantity),
+                        "received_quantity": str(received),
+                    }
+                )
+    computed_subtotal = _money(
+        sum((line.quantity * line.unit_price for line in data.invoice_lines), Decimal(0))
+    )
     if computed_subtotal != _money(data.invoice_subtotal):
-        exceptions.append({"type": "SUBTOTAL_MISMATCH", "computed": str(computed_subtotal),
-                           "invoice": str(_money(data.invoice_subtotal))})
+        exceptions.append(
+            {
+                "type": "SUBTOTAL_MISMATCH",
+                "computed": str(computed_subtotal),
+                "invoice": str(_money(data.invoice_subtotal)),
+            }
+        )
     if _money(data.invoice_subtotal + data.invoice_tax) != _money(data.invoice_total):
         exceptions.append({"type": "TOTAL_MISMATCH"})
     recommendation = "APPROVE_FOR_REVIEW" if not exceptions else "HOLD_FOR_REVIEW"
-    return {"invoice_id": data.invoice_number, "vendor_status": "MATCHED" if data.vendor_match else "MISMATCH",
-            "po_status": "FOUND" if data.po_found else "MISSING", "grn_status": "FOUND" if data.grn_found else "MISSING",
-            "matching": {"quantity": quantity_status, "price": price_status}, "exceptions": exceptions,
-            "recommendation": recommendation, "payment_execution": False}
+    return {
+        "invoice_id": data.invoice_number,
+        "vendor_status": "MATCHED" if data.vendor_match else "MISMATCH",
+        "po_status": "FOUND" if data.po_found else "MISSING",
+        "grn_status": "FOUND" if data.grn_found else "MISSING",
+        "matching": {"quantity": quantity_status, "price": price_status},
+        "exceptions": exceptions,
+        "recommendation": recommendation,
+        "payment_execution": False,
+    }

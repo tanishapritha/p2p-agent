@@ -1,11 +1,15 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
-from sqlalchemy import String, DateTime, ForeignKey, Numeric, Text, UniqueConstraint, JSON
+
+from sqlalchemy import JSON, DateTime, ForeignKey, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from app.db import Base
 
+
 def now_utc():
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
+
 
 class Vendor(Base):
     __tablename__ = "vendors"
@@ -13,6 +17,7 @@ class Vendor(Base):
     code: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(255))
     invoices: Mapped[list["Invoice"]] = relationship(back_populates="vendor")
+
 
 class PurchaseOrder(Base):
     __tablename__ = "purchase_orders"
@@ -22,6 +27,7 @@ class PurchaseOrder(Base):
     currency: Mapped[str] = mapped_column(String(3), default="INR")
     lines: Mapped[list["POLine"]] = relationship(cascade="all, delete-orphan")
 
+
 class POLine(Base):
     __tablename__ = "po_lines"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -30,6 +36,7 @@ class POLine(Base):
     quantity: Mapped[Decimal] = mapped_column(Numeric(14, 3))
     unit_price: Mapped[Decimal] = mapped_column(Numeric(14, 2))
 
+
 class GoodsReceipt(Base):
     __tablename__ = "goods_receipts"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -37,12 +44,14 @@ class GoodsReceipt(Base):
     po_id: Mapped[int] = mapped_column(ForeignKey("purchase_orders.id"))
     lines: Mapped[list["GRNLine"]] = relationship(cascade="all, delete-orphan")
 
+
 class GRNLine(Base):
     __tablename__ = "grn_lines"
     id: Mapped[int] = mapped_column(primary_key=True)
     grn_id: Mapped[int] = mapped_column(ForeignKey("goods_receipts.id"))
     description: Mapped[str] = mapped_column(String(255))
     quantity_received: Mapped[Decimal] = mapped_column(Numeric(14, 3))
+
 
 class Invoice(Base):
     __tablename__ = "invoices"
@@ -61,6 +70,7 @@ class Invoice(Base):
     vendor: Mapped[Vendor] = relationship(back_populates="invoices")
     lines: Mapped[list["InvoiceLine"]] = relationship(cascade="all, delete-orphan")
 
+
 class InvoiceLine(Base):
     __tablename__ = "invoice_lines"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -69,13 +79,15 @@ class InvoiceLine(Base):
     quantity: Mapped[Decimal] = mapped_column(Numeric(14, 3))
     unit_price: Mapped[Decimal] = mapped_column(Numeric(14, 2))
 
+
 class FinancialPolicy(Base):
     __tablename__ = "financial_policies"
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(100), unique=True)
-    quantity_tolerance: Mapped[Decimal] = mapped_column(Numeric(8, 3), default=Decimal("0"))
-    price_tolerance: Mapped[Decimal] = mapped_column(Numeric(8, 2), default=Decimal("0"))
+    quantity_tolerance: Mapped[Decimal] = mapped_column(Numeric(8, 3), default=Decimal(0))
+    price_tolerance: Mapped[Decimal] = mapped_column(Numeric(8, 2), default=Decimal(0))
     currency: Mapped[str] = mapped_column(String(3), default="INR")
+
 
 class ExceptionCase(Base):
     __tablename__ = "exception_cases"
@@ -84,6 +96,7 @@ class ExceptionCase(Base):
     recommendation: Mapped[str] = mapped_column(String(32))
     result: Mapped[dict] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
 
 class AgentRun(Base):
     __tablename__ = "agent_runs"
@@ -96,7 +109,10 @@ class AgentRun(Base):
     reviewer: Mapped[str | None] = mapped_column(String(255), nullable=True)
     review_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=now_utc, onupdate=now_utc
+    )
+
 
 class AgentEvent(Base):
     __tablename__ = "agent_events"
@@ -106,6 +122,7 @@ class AgentEvent(Base):
     status: Mapped[str] = mapped_column(String(32))
     metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
 
 class EvaluationRun(Base):
     __tablename__ = "evaluation_runs"
